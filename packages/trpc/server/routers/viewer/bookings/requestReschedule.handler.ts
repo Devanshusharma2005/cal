@@ -44,49 +44,56 @@ export const requestRescheduleHandler = async ({ ctx, input }: RequestReschedule
   const { user } = ctx;
   const { bookingId, rescheduleReason: cancellationReason } = input;
   log.debug("Started", safeStringify({ bookingId, cancellationReason, user }));
-  const bookingToReschedule = await prisma.booking.findUniqueOrThrow({
-    select: {
-      id: true,
-      uid: true,
-      userId: true,
-      title: true,
-      description: true,
-      startTime: true,
-      endTime: true,
-      eventTypeId: true,
-      userPrimaryEmail: true,
-      eventType: {
-        include: {
-          team: {
-            select: {
-              id: true,
-              name: true,
-              parentId: true,
+
+  let bookingToReschedule;
+  try {
+    bookingToReschedule = await prisma.booking.findUniqueOrThrow({
+      select: {
+        id: true,
+        uid: true,
+        userId: true,
+        title: true,
+        description: true,
+        startTime: true,
+        endTime: true,
+        eventTypeId: true,
+        userPrimaryEmail: true,
+        eventType: {
+          include: {
+            team: {
+              select: {
+                id: true,
+                name: true,
+                parentId: true,
+              },
             },
           },
         },
+        location: true,
+        attendees: true,
+        references: true,
+        customInputs: true,
+        dynamicEventSlugRef: true,
+        dynamicGroupSlugRef: true,
+        destinationCalendar: true,
+        smsReminderNumber: true,
+        workflowReminders: true,
+        responses: true,
+        iCalUID: true,
       },
-      location: true,
-      attendees: true,
-      references: true,
-      customInputs: true,
-      dynamicEventSlugRef: true,
-      dynamicGroupSlugRef: true,
-      destinationCalendar: true,
-      smsReminderNumber: true,
-      workflowReminders: true,
-      responses: true,
-      iCalUID: true,
-    },
-    where: {
-      uid: bookingId,
-      NOT: {
-        status: {
-          in: [BookingStatus.CANCELLED, BookingStatus.REJECTED],
+      where: {
+        uid: bookingId,
+        NOT: {
+          status: {
+            in: [BookingStatus.CANCELLED, BookingStatus.REJECTED],
+          },
         },
       },
-    },
-  });
+    });
+  } catch (error) {
+    log.error("Database error finding booking to reschedule", error);
+    throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+  }
 
   if (!bookingToReschedule.userId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Booking to reschedule doesn't have an owner" });
@@ -98,14 +105,20 @@ export const requestRescheduleHandler = async ({ ctx, input }: RequestReschedule
 
   const bookingBelongsToTeam = !!bookingToReschedule.eventType?.teamId;
 
-  const userTeams = await prisma.user.findUniqueOrThrow({
-    where: {
-      id: user.id,
-    },
-    select: {
-      teams: true,
-    },
-  });
+  let userTeams;
+  try {
+    userTeams = await prisma.user.findUniqueOrThrow({
+      where: {
+        id: user.id,
+      },
+      select: {
+        teams: true,
+      },
+    });
+  } catch (error) {
+    log.error("Database error finding user teams", error);
+    throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+  }
 
   if (bookingBelongsToTeam && bookingToReschedule.eventType?.teamId) {
     const userTeamIds = userTeams.teams.map((item) => item.teamId);
@@ -127,16 +140,21 @@ export const requestRescheduleHandler = async ({ ctx, input }: RequestReschedule
 
   let event: Partial<EventType> = {};
   if (bookingToReschedule.eventTypeId) {
-    event = await prisma.eventType.findUniqueOrThrow({
-      select: {
-        title: true,
-        schedulingType: true,
-        recurringEvent: true,
-      },
-      where: {
-        id: bookingToReschedule.eventTypeId,
-      },
-    });
+    try {
+      event = await prisma.eventType.findUniqueOrThrow({
+        select: {
+          title: true,
+          schedulingType: true,
+          recurringEvent: true,
+        },
+        where: {
+          id: bookingToReschedule.eventTypeId,
+        },
+      });
+    } catch (error) {
+      log.error("Database error finding event type", error);
+      throw new TRPCError({ code: "NOT_FOUND", message: "Event type not found" });
+    }
   }
   await prisma.booking.update({
     where: {

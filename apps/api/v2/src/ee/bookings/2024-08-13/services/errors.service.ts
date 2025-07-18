@@ -1,5 +1,17 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+} from "@nestjs/common";
 import { Logger } from "@nestjs/common";
+import {
+  PrismaClientKnownRequestError,
+  PrismaClientUnknownRequestError,
+  PrismaClientValidationError,
+  PrismaClientInitializationError,
+  PrismaClientRustPanicError,
+} from "@prisma/client/runtime/library";
 
 import { CreateBookingInput } from "@calcom/platform-types";
 
@@ -51,5 +63,61 @@ export class ErrorsBookingsService_2024_08_13 {
       }
     }
     throw error;
+  }
+
+  /**
+   * Handles database errors by logging them and throwing user-safe exceptions
+   * This prevents database schema details from being exposed to API consumers
+   */
+  handleDatabaseError(error: unknown, operation: string, resourceType?: string): never {
+    this.logger.error(`Database error in ${operation}`, error);
+
+    // Handle Prisma-specific errors
+    if (error instanceof PrismaClientKnownRequestError) {
+      switch (error.code) {
+        case "P2002": // Unique constraint failed
+          throw new BadRequestException("A resource with these details already exists.");
+        case "P2025": // Record not found
+          if (resourceType) {
+            throw new NotFoundException(`${resourceType} not found.`);
+          }
+          throw new NotFoundException("The requested resource was not found.");
+        case "P2003": // Foreign key constraint failed
+          throw new BadRequestException("Invalid reference - the related resource does not exist.");
+        case "P2014": // Invalid ID
+          throw new BadRequestException("Invalid ID provided.");
+        case "P2016": // Query interpretation error
+          throw new BadRequestException("Invalid query parameters provided.");
+        case "P2021": // Table does not exist
+        case "P2022": // Column does not exist
+          this.logger.error(`Database schema error: ${error.code} - ${error.message}`);
+          throw new InternalServerErrorException("Something went wrong. Please try again later.");
+        default:
+          this.logger.error(`Unhandled Prisma error code: ${error.code} - ${error.message}`);
+          throw new InternalServerErrorException("Something went wrong. Please try again later.");
+      }
+    }
+
+    // Handle other Prisma client errors
+    if (
+      error instanceof PrismaClientUnknownRequestError ||
+      error instanceof PrismaClientValidationError ||
+      error instanceof PrismaClientInitializationError ||
+      error instanceof PrismaClientRustPanicError
+    ) {
+      this.logger.error(`Prisma client error in ${operation}`, error);
+      throw new InternalServerErrorException("Something went wrong. Please try again later.");
+    }
+
+    // Handle generic errors
+    if (error instanceof Error) {
+      // Don't expose the original error message as it might contain sensitive information
+      this.logger.error(`Generic error in ${operation}: ${error.message}`, error);
+      throw new InternalServerErrorException("Something went wrong. Please try again later.");
+    }
+
+    // Fallback for unknown error types
+    this.logger.error(`Unknown error in ${operation}`, error);
+    throw new InternalServerErrorException("Something went wrong. Please try again later.");
   }
 }

@@ -143,43 +143,50 @@ export class BookingsService_2024_08_13 {
   }
 
   async getBookedEventType(body: CreateBookingInput) {
-    if (body.eventTypeId) {
-      return await this.eventTypesRepository.getEventTypeByIdWithOwnerAndTeam(body.eventTypeId);
-    } else if (body.username && body.eventTypeSlug) {
-      const user = await this.usersRepository.findByUsername(body.username, body.organizationSlug);
-      if (!user) {
-        throw new NotFoundException(`User with username ${body.username} not found`);
+    try {
+      if (body.eventTypeId) {
+        return await this.eventTypesRepository.getEventTypeByIdWithOwnerAndTeam(body.eventTypeId);
+      } else if (body.username && body.eventTypeSlug) {
+        const user = await this.usersRepository.findByUsername(body.username, body.organizationSlug);
+        if (!user) {
+          throw new NotFoundException(`User with username ${body.username} not found`);
+        }
+        return await this.eventTypesRepository.getUserEventTypeBySlugWithOwnerAndTeam(
+          user.id,
+          body.eventTypeSlug
+        );
+      } else if (body.teamSlug && body.eventTypeSlug) {
+        const team = await this.getBookedEventTypeTeam(body.teamSlug, body.organizationSlug);
+        if (!team) {
+          throw new NotFoundException(`Team with slug ${body.teamSlug} not found`);
+        }
+        return await this.teamsEventTypesRepository.getEventTypeByTeamIdAndSlugWithOwnerAndTeam(
+          team.id,
+          body.eventTypeSlug
+        );
       }
-      return await this.eventTypesRepository.getUserEventTypeBySlugWithOwnerAndTeam(
-        user.id,
-        body.eventTypeSlug
-      );
-    } else if (body.teamSlug && body.eventTypeSlug) {
-      const team = await this.getBookedEventTypeTeam(body.teamSlug, body.organizationSlug);
-      if (!team) {
-        throw new NotFoundException(`Team with slug ${body.teamSlug} not found`);
-      }
-      return await this.teamsEventTypesRepository.getEventTypeByTeamIdAndSlugWithOwnerAndTeam(
-        team.id,
-        body.eventTypeSlug
-      );
+      return null;
+    } catch (error) {
+      this.errorsBookingsService.handleDatabaseError(error, `getBookedEventType`, "Event type");
     }
-    return null;
   }
 
   async getBookedEventTypeTeam(teamSlug: string, organizationSlug: string | undefined) {
-    if (!organizationSlug) {
-      return await this.teamsRepository.findTeamBySlug(teamSlug);
-    }
+    try {
+      if (!organizationSlug) {
+        return await this.teamsRepository.findTeamBySlug(teamSlug);
+      }
+      const organization = await this.organizationsRepository.findOrgBySlug(organizationSlug);
+      if (!organization) {
+        throw new NotFoundException(
+          `slots-input.service.ts: Organization with slug ${organizationSlug} not found`
+        );
+      }
 
-    const organization = await this.organizationsRepository.findOrgBySlug(organizationSlug);
-    if (!organization) {
-      throw new NotFoundException(
-        `slots-input.service.ts: Organization with slug ${organizationSlug} not found`
-      );
+      return await this.organizationsTeamsRepository.findOrgTeamBySlug(organization.id, teamSlug);
+    } catch (error) {
+      this.errorsBookingsService.handleDatabaseError(error, `getBookedEventTypeTeam`, "Team");
     }
-
-    return await this.organizationsTeamsRepository.findOrgTeamBySlug(organization.id, teamSlug);
   }
 
   async hasRequiredBookingFieldsResponses(body: CreateBookingInput, eventType: EventType | null) {
