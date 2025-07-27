@@ -88,74 +88,115 @@ export default function ImageUploader({
     method: "readAsDataURL",
   });
 
-  const validateImageFile = async (file: File): Promise<string | null> => {
-    const limit = 5 * 1000000; // max limit 5mb
-    if (file.size > limit) {
-      return t("image_size_limit_exceed");
-    }
-
-    if (!file.type.startsWith("image/")) {
-      return "Only image files are allowed";
-    }
-
-    try {
-      const buffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(buffer);
-
-      if (
-        uint8Array.length >= 4 &&
-        uint8Array[0] === 0x25 &&
-        uint8Array[1] === 0x50 &&
-        uint8Array[2] === 0x44 &&
-        uint8Array[3] === 0x46
-      ) {
-        return "PDF files cannot be uploaded as images";
-      }
-
-      const isValidImage =
-        (uint8Array.length >= 8 &&
-          uint8Array[0] === 0x89 &&
-          uint8Array[1] === 0x50 &&
-          uint8Array[2] === 0x4e &&
-          uint8Array[3] === 0x47) ||
-        (uint8Array.length >= 3 &&
-          uint8Array[0] === 0xff &&
-          uint8Array[1] === 0xd8 &&
-          uint8Array[2] === 0xff) ||
-        (uint8Array.length >= 6 &&
-          uint8Array[0] === 0x47 &&
-          uint8Array[1] === 0x49 &&
-          uint8Array[2] === 0x46 &&
-          uint8Array[3] === 0x38) ||
-        (uint8Array.length >= 12 &&
-          uint8Array[0] === 0x52 &&
-          uint8Array[1] === 0x49 &&
-          uint8Array[2] === 0x46 &&
-          uint8Array[3] === 0x46);
-
-      if (!isValidImage) {
-        return "Invalid image file format";
-      }
-
-      return null;
-    } catch (error) {
-      return "Failed to validate image file";
-    }
-  };
-
-  const onInputFile = async (e: FileEvent<HTMLInputElement>) => {
+  const onInputFile = (e: FileEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) {
       return;
     }
 
+    const limit = 5 * 1000000; // max limit 5mb
     const file = e.target.files[0];
-    const validationError = await validateImageFile(file);
 
-    if (validationError) {
-      showToast(validationError, "error");
-    } else {
-      setFile(file);
+    // File size validation
+    if (file.size > limit) {
+      showToast(t("image_size_limit_exceed"), "error");
+      return;
     }
+
+    // MIME type validation - check declared MIME type
+    const allowedMimeTypes = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
+
+    if (!allowedMimeTypes.includes(file.type.toLowerCase())) {
+      showToast(t("invalid_file_type"), "error");
+      return;
+    }
+
+    // File content validation - check file magic bytes
+    const validateFileContent = (file: File): Promise<boolean> => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+          const uint8Array = new Uint8Array(arrayBuffer.slice(0, 12)); // Check first 12 bytes
+
+          // First, explicitly check for PDF files (security vulnerability vector)
+          if (
+            uint8Array.length >= 4 &&
+            uint8Array[0] === 0x25 &&
+            uint8Array[1] === 0x50 &&
+            uint8Array[2] === 0x44 &&
+            uint8Array[3] === 0x46
+          ) {
+            resolve(false); // PDF detected - reject
+            return;
+          }
+
+          // Magic bytes for allowed image formats
+          const magicBytes = {
+            png: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+            jpeg: [0xff, 0xd8, 0xff],
+            gif87a: [0x47, 0x49, 0x46, 0x38, 0x37, 0x61],
+            gif89a: [0x47, 0x49, 0x46, 0x38, 0x39, 0x61],
+            webp: [0x52, 0x49, 0x46, 0x46], // RIFF header (WebP also has WEBP at bytes 8-11)
+          };
+
+          // Check PNG
+          if (uint8Array.length >= 8 && magicBytes.png.every((byte, index) => uint8Array[index] === byte)) {
+            resolve(true);
+            return;
+          }
+
+          // Check JPEG
+          if (uint8Array.length >= 3 && magicBytes.jpeg.every((byte, index) => uint8Array[index] === byte)) {
+            resolve(true);
+            return;
+          }
+
+          // Check GIF 87a
+          if (
+            uint8Array.length >= 6 &&
+            magicBytes.gif87a.every((byte, index) => uint8Array[index] === byte)
+          ) {
+            resolve(true);
+            return;
+          }
+
+          // Check GIF 89a
+          if (
+            uint8Array.length >= 6 &&
+            magicBytes.gif89a.every((byte, index) => uint8Array[index] === byte)
+          ) {
+            resolve(true);
+            return;
+          }
+
+          // Check WebP (RIFF header + WEBP signature)
+          if (
+            uint8Array.length >= 12 &&
+            magicBytes.webp.every((byte, index) => uint8Array[index] === byte) &&
+            uint8Array[8] === 0x57 &&
+            uint8Array[9] === 0x45 &&
+            uint8Array[10] === 0x42 &&
+            uint8Array[11] === 0x50
+          ) {
+            resolve(true);
+            return;
+          }
+
+          resolve(false);
+        };
+        reader.onerror = () => resolve(false);
+        reader.readAsArrayBuffer(file.slice(0, 12));
+      });
+    };
+
+    // Validate file content asynchronously
+    validateFileContent(file).then((isValid) => {
+      if (!isValid) {
+        showToast(t("only_image_files_are_permitted"), "error");
+        return;
+      }
+      setFile(file);
+    });
   };
 
   const showCroppedImage = useCallback(
