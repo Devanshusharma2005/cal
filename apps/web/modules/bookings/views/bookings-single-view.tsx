@@ -549,27 +549,27 @@ export default function Success(props: PageProps) {
                           </h4>
                         )}
 
-                      <div className="border-subtle text-default mt-8 grid grid-cols-3 gap-x-4 border-t pt-8 text-left rtl:text-right sm:gap-x-0">
+                      <div className="border-subtle text-default mt-8 space-y-4 border-t pt-8 text-left rtl:text-right sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 sm:space-y-0">
                         {(isCancelled || reschedule) && cancellationReason && (
                           <>
-                            <div className="font-medium">
+                            <div className="mb-1 font-medium sm:mb-0">
                               {isCancelled ? t("reason") : t("reschedule_reason")}
                             </div>
-                            <div className="col-span-2 mb-6 last:mb-0">{cancellationReason}</div>
+                            <div className="ml-2 sm:col-span-2 sm:ml-0">{cancellationReason}</div>
                           </>
                         )}
                         {isCancelled && bookingInfo?.cancelledBy && (
                           <>
-                            <div className="font-medium">{t("cancelled_by")}</div>
-                            <div className="col-span-2 mb-6 last:mb-0">
+                            <div className="mb-1 font-medium sm:mb-0">{t("cancelled_by")}: </div>
+                            <div className="ml-2 sm:col-span-2 sm:ml-0">
                               <p className="break-words">{bookingInfo?.cancelledBy}</p>
                             </div>
                           </>
                         )}
                         {previousBooking && (
                           <>
-                            <div className="font-medium">{t("rescheduled_by")}</div>
-                            <div className="col-span-2 mb-6 last:mb-0">
+                            <div className="mb-1 font-medium sm:mb-0">{t("rescheduled_by")}: </div>
+                            <div className="ml-2 sm:col-span-2 sm:ml-0">
                               <p className="break-words">{previousBooking?.rescheduledBy}</p>
                               <Link className="text-sm underline" href={`/booking/${previousBooking?.uid}`}>
                                 {t("original_booking")}
@@ -577,12 +577,12 @@ export default function Success(props: PageProps) {
                             </div>
                           </>
                         )}
-                        <div className="font-medium">{t("what")}</div>
-                        <div className="col-span-2 mb-6 last:mb-0" data-testid="booking-title">
+                        <div className="mb-1 font-medium sm:mb-0">{t("what")}</div>
+                        <div className="ml-2 sm:col-span-2 sm:ml-0" data-testid="booking-title">
                           {isRoundRobin ? bookingInfo.title : eventName}
                         </div>
-                        <div className="font-medium">{t("when")}</div>
-                        <div className="col-span-2 mb-6 last:mb-0">
+                        <div className="mb-1 font-medium sm:mb-0">{t("when")}</div>
+                        <div className="ml-2 sm:col-span-2 sm:ml-0">
                           {reschedule && !!formerTime && (
                             <p className="line-through">
                               <RecurringBookings
@@ -610,8 +610,8 @@ export default function Success(props: PageProps) {
                         </div>
                         {(bookingInfo?.user || bookingInfo?.attendees) && (
                           <>
-                            <div className="font-medium">{t("who")}</div>
-                            <div className="col-span-2 last:mb-0">
+                            <div className="mb-1 font-medium sm:mb-0">{t("who")}</div>
+                            <div className="ml-2 sm:col-span-2 sm:ml-0">
                               {bookingInfo?.user && (
                                 <div className="mb-3">
                                   <div>
